@@ -27,7 +27,7 @@ var (
 	ErrMailConfig  = errors.New("no se pudo enviar el correo")
 	ErrCode        = errors.New("codigo invalido")
 	ErrCodeGone    = errors.New("el codigo vencio")
-	ErrPassword    = errors.New("la nueva contraseña debe tener al menos 8 caracteres")
+	ErrPassword    = errors.New("la contraseña debe tener 8 caracteres, una mayúscula, una minúscula, un número y un signo")
 	ErrSession     = errors.New("la sesion vencio")
 	namePattern    = regexp.MustCompile(`^[\p{L} ]{2,40}$`)
 	idPattern      = regexp.MustCompile(`^\d{5,15}$`)
@@ -139,7 +139,7 @@ func (a App) Reset(ctx context.Context, body model.Reset) error {
 	if !idPattern.MatchString(identification) || digits == "" {
 		return ErrCode
 	}
-	if len(body.Password) < 8 || len(body.Password) > 72 {
+	if !strongPassword(body.Password) {
 		return ErrPassword
 	}
 	account, err := repository.Find(ctx, a.DB, identification)
@@ -228,14 +228,36 @@ func clean(body model.Register) (string, string, string, string, string, string,
 		return "", "", "", "", "", "", errors.New("el primer apellido debe tener solo letras")
 	case !idPattern.MatchString(identification):
 		return "", "", "", "", "", "", errors.New("la identificacion debe tener entre 5 y 15 numeros")
+	case phone == "" && correo == "":
+		return "", "", "", "", "", "", errors.New("coloca un celular o un correo para recuperar la cuenta")
 	case phone != "" && !phonePattern.MatchString(phone):
 		return "", "", "", "", "", "", errors.New("el celular debe tener solo numeros")
 	case correo != "" && !correoPattern.MatchString(correo):
-		return "", "", "", "", "", "", errors.New("el correo no es valido")
-	case len(body.Password) < 8 || len(body.Password) > 72:
-		return "", "", "", "", "", "", errors.New("la contraseña debe tener al menos 8 caracteres")
+		return "", "", "", "", "", "", errors.New("el correo debe incluir un @ y un dominio")
+	case !strongPassword(body.Password):
+		return "", "", "", "", "", "", ErrPassword
 	}
 	return first, last, identification, phone, correo, body.Password, nil
+}
+
+func strongPassword(password string) bool {
+	if len(password) < 8 || len(password) > 72 {
+		return false
+	}
+	var upper, lower, digit, sign bool
+	for _, r := range password {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			upper = true
+		case r >= 'a' && r <= 'z':
+			lower = true
+		case r >= '0' && r <= '9':
+			digit = true
+		default:
+			sign = true
+		}
+	}
+	return upper && lower && digit && sign
 }
 
 func onlyDigits(value string) string {
